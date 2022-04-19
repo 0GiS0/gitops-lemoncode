@@ -486,3 +486,6 @@ http://localhost:3000/d/flux-cluster/flux-cluster-stats?orgId=1&refresh=10s
 
 # See secret decoded
 kubectl -n prod-tour-of-heroes get secret prod-sqlserver-connection-string-b5f9489m89 -o yaml
+
+# Decode yaml
+sops --decrypt ./tour-of-heroes-secured-secrets/base/backend/secret.enc.yaml > backend-secret.yaml
