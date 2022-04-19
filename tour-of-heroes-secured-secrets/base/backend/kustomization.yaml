@@ -4,7 +4,7 @@ resources:
   - deployment.yaml
   - service.yaml
   - namespace.yaml
-   - secret-sealed.yaml
+  - secret-sealed.yaml
   # - secret.enc.yaml  
   # - secret.yaml
 # secretGenerator:
