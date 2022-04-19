@@ -63,9 +63,13 @@ mkdir ./clusters/$AKS_NAME/sources
 ### Plain Manifests ###
 
 # Create a secret with Azure DevOps credentials (TODO: add secret to the source code)
+AZURE_DEVOPS_REPO_PLAIN="https://gis@dev.azure.com/gis/Tour%20Of%20Heroes%20GitOps/_git/Plain"
+AZURE_DEVOPS_USERNAME=giselatb
+AZURE_DEVOPS_PASSWORD=3c76pwcgm6kp6uq6i3xjmqboi2p7icmj7nbjluprabmrglatmodq
+
 kubectl create secret generic tour-of-heroes-az-devops \
---from-literal=username=giselatb \
---from-literal=password=3c76pwcgm6kp6uq6i3xjmqboi2p7icmj7nbjluprabmrglatmodq \
+--from-literal=username=$AZURE_DEVOPS_USERNAME \
+--from-literal=password=$AZURE_DEVOPS_PASSWORD \
 -n tour-of-heroes
 
 # Use Git over HTTPS 
@@ -223,3 +227,221 @@ http://localhost:3000/d/flux-cluster/flux-cluster-stats?orgId=1&refresh=10s
 
 # CI
 https://www.mytechramblings.com/posts/gitops-with-azure-devops-helm-acr-flux-and-k8s/
+
+##############################################
+###### AKS native integration with flux ######
+##############################################
+
+# https://www.returngis.net/2022/01/integracion-nativa-de-flux-con-aks/
+
+# Register providers
+az provider register --namespace Microsoft.Kubernetes
+az provider register --namespace Microsoft.KubernetesConfiguration
+
+# AKS
+az feature register --namespace Microsoft.ContainerService --name AKS-ExtensionManager
+az provider register --namespace Microsoft.ContainerService
+
+#Check status
+az provider show -n Microsoft.Kubernetes --query "registrationState"
+az provider show -n Microsoft.ContainerService --query "registrationState"
+az provider show -n Microsoft.KubernetesConfiguration --query "registrationState"
+
+# Variables
+RESOURCE_GROUP="aks-flux-integration"
+AKS_CLUSTER_NAME="aks-flux-integration"
+LOCATION="westeurope"
+
+# Create resource group
+az group create --name $RESOURCE_GROUP --location $LOCATION
+
+# Create AKS cluster
+az aks create \
+--resource-group $RESOURCE_GROUP \
+--name $AKS_CLUSTER_NAME \
+--node-vm-size Standard_B4ms \
+--generate-ssh-keys
+
+# Attach Azure Container Registry with the images
+az aks update --resource-group $RESOURCE_GROUP --name $AKS_CLUSTER_NAME --attach-acr $ACR_NAME
+
+# Get AKS credentials
+az aks get-credentials --resource-group $RESOURCE_GROUP --name $AKS_CLUSTER_NAME
+
+# Enable CLI extensions
+az extension add --name k8s-configuration
+az extension add --name k8s-extension
+
+# Repository values
+AZURE_DEVOPS_REPO_PLAIN="https://gis@dev.azure.com/gis/Tour%20Of%20Heroes%20GitOps/_git/Plain"
+AZURE_DEVOPS_USERNAME=giselatb
+AZURE_DEVOPS_PASSWORD=3c76pwcgm6kp6uq6i3xjmqboi2p7icmj7nbjluprabmrglatmodq
+
+# Generate a Flux Configuration
+az k8s-configuration flux create \
+--resource-group $RESOURCE_GROUP \
+--cluster-name $AKS_CLUSTER_NAME \
+--name tour-of-heroes \
+--namespace tour-of-heroes \
+--cluster-type managedClusters \
+--url $AZURE_DEVOPS_REPO_PLAIN \
+--https-user $AZURE_DEVOPS_USERNAME \
+--https-key $AZURE_DEVOPS_PASSWORD \
+--branch without-aditional-files \
+--sync-interval=10s \
+--kustomization name=prod-env path=/ prune=true sync_interval=10s retry_interval=1m timeout=2m
+
+# Nota: de los manifiestos planos he tenido que:
+# Eliminar los secretos por este error: "Secret/mssql forbidden, error: data values must be of type string\n",
+# Añadir los namespaces a los recursos porque sino tenía este otro error: "Service/tour-of-heroes-api namespace not specified, error: the server could not find the requested resource\n",
+
+# Update
+az k8s-configuration flux update \
+--resource-group $RESOURCE_GROUP \
+--cluster-name $AKS_CLUSTER_NAME \
+--name tour-of-heroes \
+--cluster-type managedClusters \
+--sync-interval=10s \
+--kustomization name=prod-env sync_interval=10s retry_interval=1m timeout=2m
+
+
+# Check Flux Configuration
+az k8s-configuration flux show \
+--resource-group $RESOURCE_GROUP \
+--cluster-name $AKS_CLUSTER_NAME \
+--cluster-type managedClusters \
+--name tour-of-heroes
+
+
+#########################
+# Sample with Kustomize #
+#########################
+
+AZURE_DEVOPS_REPO_PLAIN="https://gis@dev.azure.com/gis/Tour%20Of%20Heroes%20GitOps/_git/Tour%20Of%20Heroes%20Kustomize"
+AZURE_DEVOPS_USERNAME=giselatb
+AZURE_DEVOPS_PASSWORD=3c76pwcgm6kp6uq6i3xjmqboi2p7icmj7nbjluprabmrglatmodq
+
+# Generate a Flux Configuration
+az k8s-configuration flux create \
+--resource-group $RESOURCE_GROUP \
+--cluster-name $AKS_CLUSTER_NAME \
+--name tour-of-heroes-kustomize \
+--cluster-type managedClusters \
+--url $AZURE_DEVOPS_REPO_PLAIN \
+--https-user $AZURE_DEVOPS_USERNAME \
+--https-key $AZURE_DEVOPS_PASSWORD \
+--branch main \
+--sync-interval=10s \
+--kustomization name=prod-env path="./overlays/development" prune=true sync_interval=10s retry_interval=1m timeout=2m
+
+########################
+### Sample with Helm ### TODO
+########################
+
+AZURE_DEVOPS_REPO_PLAIN="https://gis@dev.azure.com/gis/Tour%20Of%20Heroes%20GitOps/_git/Tour%20Of%20Heroes%20GitOps%20with%20Helm"
+AZURE_DEVOPS_USERNAME=giselatb
+AZURE_DEVOPS_PASSWORD=3c76pwcgm6kp6uq6i3xjmqboi2p7icmj7nbjluprabmrglatmodq
+
+# Generate a Flux Configuration
+az k8s-configuration flux create \
+--resource-group $RESOURCE_GROUP \
+--cluster-name $AKS_CLUSTER_NAME \
+--name tour-of-heroes-helm \
+--cluster-type managedClusters \
+--url $AZURE_DEVOPS_REPO_PLAIN \
+--https-user $AZURE_DEVOPS_USERNAME \
+--https-key $AZURE_DEVOPS_PASSWORD \
+--branch aks-flux-integration \
+--sync-interval=10s \
+--kustomization name=helm path="./tour-of-heroes-chart" prune=true sync_interval=10s retry_interval=1m timeout=2m
+
+
+# List all Flux Configurations
+az k8s-configuration flux list \
+--resource-group $RESOURCE_GROUP \
+--cluster-name $AKS_CLUSTER_NAME \
+--cluster-type managedClusters \
+--output table
+
+###################################
+######### Secure Secrets ##########
+###################################
+
+### Mozilla SOPS: https://fluxcd.io/docs/guides/mozilla-sops/
+
+# Install gnupg and SOPS
+brew install gnupg sops
+
+# Generate a GPG key
+export KEY_NAME="cluster0.returngis.net"
+export KEY_COMMENT="flux secrets"
+
+gpg --batch --full-generate-key <<EOF
+%no-protection
+Key-Type: 1
+Key-Length: 4096
+Subkey-Type: 1
+Subkey-Length: 4096
+Expire-Date: 0
+Name-Comment: ${KEY_COMMENT}
+Name-Real: ${KEY_NAME}
+EOF
+
+# Retrieve the GPG key fingerprint
+KEY=$(gpg --list-keys ${KEY_NAME} | grep pub -A 1 | grep -v pub)
+
+# Export the public and private keypair from your local GPG keyring
+# and create a Kubernetes secret named sops-gpg in the flux-system namespace:
+gpg --export-secret-keys --armor "${KEY_NAME}" |
+kubectl create secret generic sops-gpg \
+--namespace=flux-system \
+--from-file=sops.asc=/dev/stdin
+
+kubectl get secrets -n flux-system
+
+# Create secrets for backend and db
+# Create a secret for the backend
+cat > ./tour-of-heroes-secured-secrets/base/backend/secret.yaml <<EOF
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: sqlserver-connection-string
+type: Opaque
+stringData:  
+  password: Server=tour-of-heroes-sql,1433;Initial Catalog=heroes;Persist Security Info=False;User ID=sa;Password=YourStrong!Passw0rd;
+EOF
+
+# Create a secret for the db
+cat > ./tour-of-heroes-secured-secrets/base/db/secret.yaml <<EOF
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mssql
+type: Opaque
+stringData:  
+  SA_PASSWORD: YourStrong!Passw0rd
+EOF
+
+#Create SOPS configuration
+cat <<EOF > .sops.yaml
+creation_rules:
+  - path_regex: .*.yaml
+    encrypted_regex: ^(data|stringData)$
+    pgp: ${KEY}
+EOF
+
+# Encrypt secret for backend
+sops --encrypt ./tour-of-heroes-secured-secrets/base/backend/secret.yaml > ./tour-of-heroes-secured-secrets/base/backend/secret.enc.yaml
+# Remove the unencrypted secret
+rm ./tour-of-heroes-secured-secrets/base/backend/secret.yaml
+
+# Encrypt secret for db
+sops --encrypt ./tour-of-heroes-secured-secrets/base/db/secret.yaml > ./tour-of-heroes-secured-secrets/base/db/secret.enc.yaml
+# Remove the unencrypted secret
+rm ./tour-of-heroes-secured-secrets/base/db/secret.yaml
+
+# Add this changes to the repo
+git add -A && git commit -m "Add secured secret demo"
+git push
