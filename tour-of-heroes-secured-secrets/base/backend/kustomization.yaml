@@ -4,8 +4,8 @@ resources:
   - deployment.yaml
   - service.yaml
   - namespace.yaml
-  - secret.enc.yaml
-  
+   - secret-sealed.yaml
+  # - secret.enc.yaml  
   # - secret.yaml
 # secretGenerator:
 #   - name: sqlserver-connection-string

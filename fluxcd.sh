@@ -449,6 +449,9 @@ rm ./tour-of-heroes-secured-secrets/base/db/secret.yaml
 git add -A && git commit -m "Add secured secret demo"
 git push
 
+# Test decryption
+sops --decrypt ./tour-of-heroes-secured-secrets/base/backend/secret.enc.yaml > backend-secret.yaml
+
 # Create a secret with GitHub credentials
 kubectl create secret generic github-credentials \
 --from-literal=username=$GITHUB_USER \
@@ -490,5 +493,84 @@ http://localhost:3000/d/flux-cluster/flux-cluster-stats?orgId=1&refresh=10s
 # See secret decoded
 kubectl -n prod-tour-of-heroes get secrets
 
-# Decode yaml
-sops --decrypt ./tour-of-heroes-secured-secrets/base/backend/secret.enc.yaml > backend-secret.yaml
+### Sealed Secrets: https://fluxcd.io/docs/guides/sealed-secrets/
+
+# Install the kubeseal CLI
+brew install kubeseal
+
+# Add the source for sealed secrets
+flux create source helm sealed-secrets \
+--interval=1h \
+--url=https://bitnami-labs.github.io/sealed-secrets \
+--export > ./clusters/$AKS_NAME/sources/sealed-secrets.yaml
+
+# Create a helm release for sealed secrets
+flux create helmrelease sealed-secrets \
+--interval=1h \
+--release-name=sealed-secrets-controller \
+--target-namespace=flux-system \
+--source=HelmRepository/sealed-secrets \
+--chart=sealed-secrets \
+--chart-version=">=1.15.0-0" \
+--crds=CreateReplace \
+--export > ./clusters/$AKS_NAME/apps/sealed-secrets.yaml
+
+# Push changes
+git add -A && git commit -m "Add sealed secrets demo"
+git push
+
+# check helm releases
+flux get helmreleases -n flux-system --watch
+
+# At startup, the sealed-secrets controller generates a 4096-bit RSA key pair and persists the private and public keys 
+# as Kubernetes secrets in the flux-system namespace.
+# You can retrieve the public key with:
+kubeseal --fetch-cert \
+--controller-name=sealed-secrets-controller \
+--controller-namespace=flux-system \
+> pub-sealed-secrets.pem
+
+# Create secrets for backend and db
+# Create a secret for the backend
+
+cat > ./tour-of-heroes-secured-secrets/base/backend/secret.yaml <<EOF
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: sqlserver-connection-string
+type: Opaque
+stringData:  
+  password: Server=prod-tour-of-heroes-sql,1433;Initial Catalog=heroes;Persist Security Info=False;User ID=sa;Password=YourStrong!Passw0rd;
+EOF
+
+# Create a secret for the db
+cat > ./tour-of-heroes-secured-secrets/base/db/secret.yaml <<EOF
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mssql
+type: Opaque
+stringData:  
+  SA_PASSWORD: YourStrong!Passw0rd
+EOF
+
+# Encrypt the secrets with kubeseal
+kubeseal --format=yaml --cert=pub-sealed-secrets.pem \
+< tour-of-heroes-secured-secrets/base/backend/secret.yaml > tour-of-heroes-secured-secrets/base/backend/secret-sealed.yaml
+
+# Remove the unencrypted secret
+rm tour-of-heroes-secured-secrets/base/backend/secret.yaml
+
+kubeseal --format=yaml --cert=pub-sealed-secrets.pem \
+< tour-of-heroes-secured-secrets/base/db/secret.yaml > tour-of-heroes-secured-secrets/base/db/secret-sealed.yaml
+
+# Remove the unencrypted secret
+rm tour-of-heroes-secured-secrets/base/db/secret.yaml
+
+# IMPORTANT: Update the kustomization.yaml files with the secret-sealed.yaml files
+
+# Push changes
+git add -A && git commit -m "Add secrets-seaed files"
+git push
