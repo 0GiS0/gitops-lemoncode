@@ -391,13 +391,13 @@ EOF
 KEY=$(gpg --list-keys ${KEY_NAME} | grep pub -A 1 | grep -v pub)
 
 # Export the public and private keypair from your local GPG keyring
-# and create a Kubernetes secret named sops-gpg in the flux-system namespace:
+# and create a Kubernetes secret named sops-gpg in the tour-of-heroes namespace:
 gpg --export-secret-keys --armor "${KEY_NAME}" |
 kubectl create secret generic sops-gpg \
---namespace=flux-system \
+--namespace=tour-of-heroes \
 --from-file=sops.asc=/dev/stdin
 
-kubectl get secrets -n flux-system
+kubectl get secrets -n tour-of-heroes
 
 # Create secrets for backend and db
 # Create a secret for the backend
@@ -409,7 +409,7 @@ metadata:
   name: sqlserver-connection-string
 type: Opaque
 stringData:  
-  password: Server=tour-of-heroes-sql,1433;Initial Catalog=heroes;Persist Security Info=False;User ID=sa;Password=YourStrong!Passw0rd;
+  password: Server=prod-tour-of-heroes-sql,1433;Initial Catalog=heroes;Persist Security Info=False;User ID=sa;Password=YourStrong!Passw0rd;
 EOF
 
 # Create a secret for the db
@@ -456,7 +456,7 @@ kubectl create secret generic github-credentials \
 flux create source git tour-of-heroes-secured-secrets \
 --namespace=tour-of-heroes \
 --git-implementation=libgit2 \
---url=https://github.com/$GITHUB_USER/$REPOSITORY \
+--url=https://github.com/$GITHUB_USER/gitops-lemoncode \
 --branch=main \
 --interval=30s \
 --secret-ref=github-credentials \
@@ -466,7 +466,7 @@ flux create source git tour-of-heroes-secured-secrets \
 flux create kustomization tour-of-heroes-secured-secrets \
 --namespace=tour-of-heroes \
 --source=tour-of-heroes-secured-secrets \
---path="./tour-of-heroes-secured-secrets/overlays/production" \
+--path="tour-of-heroes-secured-secrets/overlays/production" \
 --prune=true \
 --interval=10s \
 --decryption-provider=sops \
