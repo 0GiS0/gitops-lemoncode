@@ -574,3 +574,6 @@ rm tour-of-heroes-secured-secrets/base/db/secret.yaml
 # Push changes
 git add -A && git commit -m "Add secrets-seaed files"
 git push
+
+# Check the deployment
+flux get kustomizations -n tour-of-heroes --watch
