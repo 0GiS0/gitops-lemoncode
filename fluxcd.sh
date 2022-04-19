@@ -401,13 +401,13 @@ kubectl get secrets -n tour-of-heroes
 
 # Create secrets for backend and db
 # Create a secret for the backend
+
 cat > ./tour-of-heroes-secured-secrets/base/backend/secret.yaml <<EOF
 ---
 apiVersion: v1
 kind: Secret
 metadata:
   name: sqlserver-connection-string
-  namespace: prod-tour-of-heroes
 type: Opaque
 stringData:  
   password: Server=prod-tour-of-heroes-sql,1433;Initial Catalog=heroes;Persist Security Info=False;User ID=sa;Password=YourStrong!Passw0rd;
@@ -420,7 +420,6 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: mssql
-  namespace: prod-tour-of-heroes
 type: Opaque
 stringData:  
   SA_PASSWORD: YourStrong!Passw0rd
@@ -443,6 +442,8 @@ rm ./tour-of-heroes-secured-secrets/base/backend/secret.yaml
 sops --encrypt ./tour-of-heroes-secured-secrets/base/db/secret.yaml > ./tour-of-heroes-secured-secrets/base/db/secret.enc.yaml
 # Remove the unencrypted secret
 rm ./tour-of-heroes-secured-secrets/base/db/secret.yaml
+
+# IMPORTANT: you have to add this files to the kustomization.yaml files
 
 # Add this changes to the repo
 git add -A && git commit -m "Add secured secret demo"
@@ -487,7 +488,7 @@ kubectl -n monitoring port-forward svc/kube-prometheus-stack-grafana 3000:80
 http://localhost:3000/d/flux-cluster/flux-cluster-stats?orgId=1&refresh=10s
 
 # See secret decoded
-kubectl -n prod-tour-of-heroes get secret prod-sqlserver-connection-string-b5f9489m89 -o yaml
+kubectl -n prod-tour-of-heroes get secrets
 
 # Decode yaml
 sops --decrypt ./tour-of-heroes-secured-secrets/base/backend/secret.enc.yaml > backend-secret.yaml

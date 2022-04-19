@@ -4,6 +4,7 @@ resources:
   - deployment.yaml
   - service.yaml
   - persistent-volume.yaml
+  - secret.enc.yaml
   # - secret.yaml
 
 # secretGenerator:
