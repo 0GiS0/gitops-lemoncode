@@ -445,3 +445,41 @@ rm ./tour-of-heroes-secured-secrets/base/db/secret.yaml
 # Add this changes to the repo
 git add -A && git commit -m "Add secured secret demo"
 git push
+
+# Create a secret with GitHub credentials
+kubectl create secret generic github-credentials \
+--from-literal=username=$GITHUB_USER \
+--from-literal=password=$GITHUB_TOKEN \
+-n tour-of-heroes
+
+# Create a source of this repo
+flux create source git tour-of-heroes-secured-secrets \
+--namespace=tour-of-heroes \
+--git-implementation=libgit2 \
+--url=https://github.com/$GITHUB_USER/$REPOSITORY \
+--branch=main \
+--interval=30s \
+--secret-ref=github-credentials \
+--export > ./clusters/$AKS_NAME/sources/tour-of-heroes-secured-secrets.yaml
+
+# Create an application in Flux with SOPS 
+flux create kustomization tour-of-heroes-secured-secrets \
+--namespace=tour-of-heroes \
+--source=tour-of-heroes-secured-secrets \
+--path="./tour-of-heroes-secured-secrets/overlays/production" \
+--prune=true \
+--interval=10s \
+--decryption-provider=sops \
+--decryption-secret=sops-gpg \
+--export > ./clusters/$AKS_NAME/apps/tour-of-heroes-secured-secrets.yaml
+
+# Add this changes to the repo
+git add -A && git commit -m "Add tour-of-heroes-secured-secrets"
+git push
+
+# Check the deployment
+flux get kustomizations -n tour-of-heroes --watch
+
+# Check status in Grafana
+kubectl -n monitoring port-forward svc/kube-prometheus-stack-grafana 3000:80
+http://localhost:3000/d/flux-cluster/flux-cluster-stats?orgId=1&refresh=10s
