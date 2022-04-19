@@ -586,3 +586,5 @@ k get all -n prod-tour-of-heroes
 k logs sealed-secrets-controller-868754dd89-mfpvw -n flux-system -f
 
 # En el caso de los sealed secrets si que añade el prod- por delante del secreto
+
+https://medium.com/@udhanisuranga/how-to-manage-k8s-secrets-in-aks-clusters-using-secret-store-csi-drivers-and-azure-key-vaults-5ec590a9cf51
