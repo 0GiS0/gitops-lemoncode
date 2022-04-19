@@ -29,7 +29,8 @@ spec:
             - name: SA_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: mssql
+                  # name: mssql # For SOPS secrets
+                  name: prod-mssql # For sealed secrets
                   key: SA_PASSWORD
             - name: MSSQL_PID
               value: "Developer"
