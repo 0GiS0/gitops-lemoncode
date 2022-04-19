@@ -539,6 +539,7 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: sqlserver-connection-string
+  namespace: prod-tour-of-heroes
 type: Opaque
 stringData:  
   password: Server=prod-tour-of-heroes-sql,1433;Initial Catalog=heroes;Persist Security Info=False;User ID=sa;Password=YourStrong!Passw0rd;
@@ -551,6 +552,7 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: mssql
+  namespace: prod-tour-of-heroes
 type: Opaque
 stringData:  
   SA_PASSWORD: YourStrong!Passw0rd
@@ -577,3 +579,5 @@ git push
 
 # Check the deployment
 flux get kustomizations -n tour-of-heroes --watch
+
+k get all -n prod-tour-of-heroes
