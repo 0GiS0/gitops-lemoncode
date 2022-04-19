@@ -557,13 +557,13 @@ stringData:
 EOF
 
 # Encrypt the secrets with kubeseal
-kubeseal --format=yaml --cert=pub-sealed-secrets.pem \
+kubeseal --scope cluster-wide --format=yaml --cert=pub-sealed-secrets.pem \
 < tour-of-heroes-secured-secrets/base/backend/secret.yaml > tour-of-heroes-secured-secrets/base/backend/secret-sealed.yaml
 
 # Remove the unencrypted secret
 rm tour-of-heroes-secured-secrets/base/backend/secret.yaml
 
-kubeseal --format=yaml --cert=pub-sealed-secrets.pem \
+kubeseal --scope cluster-wide --format=yaml --cert=pub-sealed-secrets.pem \
 < tour-of-heroes-secured-secrets/base/db/secret.yaml > tour-of-heroes-secured-secrets/base/db/secret-sealed.yaml
 
 # Remove the unencrypted secret
@@ -579,3 +579,6 @@ git push
 flux get kustomizations -n tour-of-heroes --watch
 
 k get all -n prod-tour-of-heroes
+
+# Check sealed secret controller
+k logs sealed-secrets-controller-868754dd89-mfpvw -n flux-system -f
