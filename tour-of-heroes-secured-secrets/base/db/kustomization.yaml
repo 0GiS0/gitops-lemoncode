@@ -6,8 +6,8 @@ resources:
   - persistent-volume.yaml
   # - secret.yaml
 
-secretGenerator:
-  - name: mssql
-    type: Opaque
-    literals:
-      - "SA_PASSWORD=YourStrong!Passw0rd"
+# secretGenerator:
+#   - name: mssql
+#     type: Opaque
+#     literals:
+#       - "SA_PASSWORD=YourStrong!Passw0rd"
