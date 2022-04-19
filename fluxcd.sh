@@ -483,6 +483,8 @@ flux create kustomization tour-of-heroes-secured-secrets \
 git add -A && git commit -m "Add tour-of-heroes-secured-secrets"
 git push
 
+# En el caso de los SOP secrets no añade el prod- por delante del secreto
+
 # Check the deployment
 flux get kustomizations -n tour-of-heroes --watch
 
@@ -582,3 +584,5 @@ k get all -n prod-tour-of-heroes
 
 # Check sealed secret controller
 k logs sealed-secrets-controller-868754dd89-mfpvw -n flux-system -f
+
+# En el caso de los sealed secrets si que añade el prod- por delante del secreto
