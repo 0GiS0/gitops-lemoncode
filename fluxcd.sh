@@ -483,3 +483,6 @@ flux get kustomizations -n tour-of-heroes --watch
 # Check status in Grafana
 kubectl -n monitoring port-forward svc/kube-prometheus-stack-grafana 3000:80
 http://localhost:3000/d/flux-cluster/flux-cluster-stats?orgId=1&refresh=10s
+
+# See secret decoded
+kubectl -n prod-tour-of-heroes get secret prod-sqlserver-connection-string-b5f9489m89 -o yaml
