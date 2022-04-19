@@ -4,7 +4,7 @@ resources:
   - deployment.yaml
   - service.yaml
   - persistent-volume.yaml
-   - secret-sealed.yaml
+  - secret-sealed.yaml
   # - secret.enc.yaml
   # - secret.yaml
 
