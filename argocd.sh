@@ -29,7 +29,7 @@ az aks create \
 az aks get-credentials -n $AKS_NAME -g $RESOURCE_GROUP
 
 #####################################################################
-##################### Kubernetes con kind Azure #####################
+##################### Kubernetes con kind  ##########################
 #####################################################################
 
 # Instalar kind
@@ -37,40 +37,6 @@ brew install kind
 
 # Crear un cluster para argocb
 kind create cluster --name argocd --config kind/config.yaml
-
-# Apaños
-
-# Create a storage class called managed-csi
-kubectl apply -f kind/resources-needed/
-
-# Create a image pull secret for ACR
-kubectl create secret docker-registry tour-of-heroes-images \
-    --namespace tour-of-heroes \
-    --docker-server=$ACR_NAME.azurecr.io \
-    --docker-username=argocdregistry \
-    --docker-password=6YqXPak88Xug6+nbnoWAh4IxQjZH=m8m
-
-# Usar metallb para los servicios de tipo LoadBalancer
-# https://kind.sigs.k8s.io/docs/user/loadbalancer/
-
-
-# Alpicar manifiesto para metallb
-kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.12.1/manifests/metallb.yaml
-
-# Esperar a que los pods estén listos 
-kubectl get pods -n metallb-system --watch
-
-# Recuperar el rango de IPs que se están usando en la red de Docker del cluster de kind
-docker network inspect -f '{{.IPAM.Config}}' kind
-
-# Configurar el pool de direcciones que se usarán para los servicios de tipo LoadBalancer
-kubectl apply -f kind/resources-needed/metallb-config.yaml
-
-# Cómo acceder a los servicios de tipo LoadBalancer desde Windows o Mac
-kubectl port-forward svc/tour-of-heroes-api -n tour-of-heroes 7000:80
-kubectl port-forward svc/tour-of-heroes-web -n tour-of-heroes 8000:80
-
-# Otra opción: https://github.com/inlets/inlets-operator
 
 #####################################################################
 
@@ -81,11 +47,19 @@ kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/st
 # Check everything is running
 k get pods -n argocd
 
-# Get the password (user: admin)
+# Recuperar la contraseña para Argo CD (user: admin)
 kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
 
-# Access ArgoCD UI
+# Acceder a la interfaz de ArgoCD 
 kubectl port-forward svc/argocd-server -n argocd 8080:443
+
+http://localhost:8080
+
+# Acceder a la API y a la web
+kubectl get pod -n tour-of-heroes -o wide
+
+http://localhost:30050/api/hero 
+http://localhost:30040 # web
 
 
 ##################################################################################
