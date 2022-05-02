@@ -1,1 +1,6 @@
 fluxcd-demo
+.dccache
+.gitignore
+.DS_Store
+flux-webui
+flux-webui.tar.gz

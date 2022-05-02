@@ -1,3 +1,7 @@
+#####################################################################
+######################## Kubernetes en Azure ########################
+#####################################################################
+
 # Variables
 RESOURCE_GROUP="ArgoCD-Demo"
 AKS_NAME="aks-argocd"
@@ -24,12 +28,55 @@ az aks create \
 # Get AKS credentials
 az aks get-credentials -n $AKS_NAME -g $RESOURCE_GROUP
 
+#####################################################################
+##################### Kubernetes con kind Azure #####################
+#####################################################################
+
+# Instalar kind
+brew install kind
+
+# Crear un cluster para argocb
+kind create cluster --name argocd --config kind/config.yaml
+
+# Apaños
+
+# Create a storage class called managed-csi
+kubectl apply -f kind/resources-needed/
+
+# Create a image pull secret for ACR
+kubectl create secret docker-registry tour-of-heroes-images \
+    --namespace tour-of-heroes \
+    --docker-server=$ACR_NAME.azurecr.io \
+    --docker-username=argocdregistry \
+    --docker-password=6YqXPak88Xug6+nbnoWAh4IxQjZH=m8m
+
+# Usar metallb para los servicios de tipo LoadBalancer
+# https://kind.sigs.k8s.io/docs/user/loadbalancer/
+
+
+# Alpicar manifiesto para metallb
+kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.12.1/manifests/metallb.yaml
+
+# Esperar a que los pods estén listos 
+kubectl get pods -n metallb-system --watch
+
+# Recuperar el rango de IPs que se están usando en la red de Docker del cluster de kind
+docker network inspect -f '{{.IPAM.Config}}' kind
+
+# Configurar el pool de direcciones que se usarán para los servicios de tipo LoadBalancer
+kubectl apply -f kind/resources-needed/metallb-config.yaml
+
+# Cómo acceder a los servicios de tipo LoadBalancer desde Windows o Mac
+kubectl port-forward svc/tour-of-heroes-api -n tour-of-heroes 7000:80
+kubectl port-forward svc/tour-of-heroes-web -n tour-of-heroes 8000:80
+
+# Otra opción: https://github.com/inlets/inlets-operator
+
+#####################################################################
+
 # Deploy ArgoCD
 kubectl create namespace argocd
-# dev
 kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
-# or ha
-kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/master/manifests/ha/install.yaml
 
 # Check everything is running
 k get pods -n argocd
@@ -39,6 +86,11 @@ kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.pas
 
 # Access ArgoCD UI
 kubectl port-forward svc/argocd-server -n argocd 8080:443
+
+
+##################################################################################
+############################# Día 2 ##############################################
+##################################################################################
 
 #### New terminal ####
 
@@ -88,6 +140,52 @@ argocd app create tour-of-heroes-dev \
 --dest-server https://kubernetes.default.svc \
 --sync-policy auto \
 --upsert
+
+# Add repo with Kustomize files
+REPO_URL="https://gis@dev.azure.com/gis/Tour%20Of%20Heroes%20GitOps/_git/Tour%20Of%20Heroes%20Kustomize"
+USER_NAME="giselatb"
+PASSWORD="xgivwz27l4m57uyhhxsltqwhek5ecrzfxjubdek36kgluvsjwxcq"
+
+argocd repo add $REPO_URL \
+--name tour-of-heroes-kustomize \
+--type git \
+--username $USER_NAME \
+--password $PASSWORD \
+--project tour-of-heroes
+
+# Create app with kustomize repo
+argocd app create kustomize-tour-of-heroes \
+--repo $REPO_URL \
+--path overlays/development \
+--dest-namespace tour-of-heroes-kustomize \
+--dest-server https://kubernetes.default.svc \
+--sync-policy auto \
+--sync-option "CreateNamespace=true" \
+--upsert
+
+# Add repo with jsonnet files
+REPO_URL="https://gis@dev.azure.com/gis/Tour%20Of%20Heroes%20GitOps/_git/Tour%20Of%20Heroes%20Jsonnet"
+USER_NAME="giselatb"
+PASSWORD="poflpbieyctfiuwr2zkbpgxum7ifavpgp3eqqcwmmrpfouao7xaq"
+
+argocd repo add $REPO_URL \
+--name tour-of-heroes-jsonnet \
+--type git \
+--username $USER_NAME \
+--password $PASSWORD \
+--project tour-of-heroes
+
+# Create app with jsonnet repo
+argocd app create jsonnet-tour-of-heroes \
+--repo $REPO_URL \
+--path deployments \
+--directory-recurse \
+--dest-namespace tour-of-heroes-jsonnet \
+--dest-server https://kubernetes.default.svc \
+--sync-policy auto \
+--sync-option "CreateNamespace=true" \
+--upsert
+
 
 ##########################################
 ########### ArgoCD image updater #########
@@ -178,46 +276,3 @@ argocd app create tour-of-heroes-helm-dev \
 --annotations "argocd-image-updater.argoproj.io/web.update-strategy=latest" \
 --upsert
 
-# Add repo with Kustomize files
-REPO_URL="https://gis@dev.azure.com/gis/Tour%20Of%20Heroes%20GitOps/_git/Tour%20Of%20Heroes%20Kustomize"
-USER_NAME="giselatb"
-PASSWORD="xgivwz27l4m57uyhhxsltqwhek5ecrzfxjubdek36kgluvsjwxcq"
-
-argocd repo add $REPO_URL \
---name tour-of-heroes-kustomize \
---type git \
---username $USER_NAME \
---password $PASSWORD \
---project tour-of-heroes
-
-# Create app with kustomize repo
-argocd app create kustomize-tour-of-heroes \
---repo $REPO_URL \
---path overlays/development \
---dest-namespace tour-of-heroes-kustomize \
---dest-server https://kubernetes.default.svc \
---sync-policy auto \
---sync-option "CreateNamespace=true" \
---upsert
-
-# Add repo with jsonnet files
-REPO_URL="https://gis@dev.azure.com/gis/Tour%20Of%20Heroes%20GitOps/_git/Tour%20Of%20Heroes%20Jsonnet"
-USER_NAME="giselatb"
-PASSWORD="poflpbieyctfiuwr2zkbpgxum7ifavpgp3eqqcwmmrpfouao7xaq"
-
-argocd repo add $REPO_URL \
---name tour-of-heroes-jsonnet \
---type git \
---username $USER_NAME \
---password $PASSWORD \
---project tour-of-heroes
-
-# Create app with jsonnet repo
-argocd app create jsonnet-tour-of-heroes \
---repo $REPO_URL \
---path deployments \
---dest-namespace tour-of-heroes-jsonnet \
---dest-server https://kubernetes.default.svc \
---sync-policy auto \
---sync-option "CreateNamespace=true" \
---upsert

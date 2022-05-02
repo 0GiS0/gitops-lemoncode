@@ -1,3 +1,7 @@
+#####################################################################
+######################## Kubernetes en Azure ########################
+#####################################################################
+
 # Variables
 RESOURCE_GROUP="fluxcd"
 LOCATION="westeurope"
@@ -12,24 +16,73 @@ az aks create \
 --resource-group $RESOURCE_GROUP \
 --name $AKS_NAME \
 --node-vm-size Standard_B4ms \
---generate-ssh-keys
+--generate-ssh-keys \
+--attach-acr $ACR_NAME
 
 # Get AKS credentials
 az aks get-credentials \
 --resource-group $RESOURCE_GROUP \
 --name $AKS_NAME
 
-# Install flux locally
+#####################################################################
+##################### Kubernetes con kind Azure #####################
+#####################################################################
+
+# Instalar kind
+brew install kind
+
+# Crear un cluster para argocb
+kind create cluster --name flux --config kind/config.yaml
+
+# Apaños
+
+# Create a storage class called managed-csi
+kubectl apply -f kind/resources-needed/
+
+# Create a image pull secret for ACR
+kubectl create secret docker-registry tour-of-heroes-images \
+    --namespace tour-of-heroes \
+    --docker-server=$ACR_NAME.azurecr.io \
+    --docker-username=argocdregistry \
+    --docker-password=6YqXPak88Xug6+nbnoWAh4IxQjZH=m8m
+
+# Usar metallb para los servicios de tipo LoadBalancer
+# https://kind.sigs.k8s.io/docs/user/loadbalancer/
+
+
+# Alpicar manifiesto para metallb
+kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.12.1/manifests/metallb.yaml
+
+# Esperar a que los pods estén listos 
+kubectl get pods -n metallb-system --watch
+
+# Recuperar el rango de IPs que se están usando en la red de Docker del cluster de kind
+docker network inspect -f '{{.IPAM.Config}}' kind
+
+# Configurar el pool de direcciones que se usarán para los servicios de tipo LoadBalancer
+kubectl apply -f kind/resources-needed/metallb-config.yaml
+
+# Cómo acceder a los servicios de tipo LoadBalancer desde Windows o Mac
+kubectl port-forward svc/tour-of-heroes-api -n tour-of-heroes 7000:80
+kubectl port-forward svc/tour-of-heroes-web -n tour-of-heroes 8000:80
+
+# Otra opción: https://github.com/inlets/inlets-operator
+
+#####################################################################
+
+
+# Instalar flux localmente
 brew install fluxcd/tap/flux
 
-flux bootstrap -h
-flux bootstrap github -h
+# Comprobar que el cluster cumple los requisitos:
+flux check --pre
 
-
-export GITHUB_TOKEN=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
+# Credenciales de GitHub para poder crear un repositorio
+export GITHUB_TOKEN=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
 export GITHUB_USER=0gis0
 
-REPOSITORY="fluxcd-demo"
+REPOSITORY="kind-flux"
+AKS_NAME="kind-flux"
 
 flux bootstrap github \
   --owner=$GITHUB_USER \
@@ -46,11 +99,6 @@ kubectl get all -n flux-system
 
 # https://fluxcd.io/docs/guides/repository-structure/
 
-# Give ARC access to this cluster
-az aks update --resource-group $RESOURCE_GROUP --name $AKS_NAME --attach-acr $ACR_NAME
-
-# get secrets
-kubectl get secrets -n flux-system
 
 # Deploy app in Azure DevOps Repos
 mkdir ./clusters/$AKS_NAME/apps
@@ -61,11 +109,12 @@ mkdir ./clusters/$AKS_NAME/sources
 #########################################
 
 ### Plain Manifests ###
+kubectl create ns tour-of-heroes
 
 # Create a secret with Azure DevOps credentials (TODO: add secret to the source code)
 AZURE_DEVOPS_REPO_PLAIN="https://gis@dev.azure.com/gis/Tour%20Of%20Heroes%20GitOps/_git/Plain"
 AZURE_DEVOPS_USERNAME=giselatb
-AZURE_DEVOPS_PASSWORD=3c76pwcgm6kp6uq6i3xjmqboi2p7icmj7nbjluprabmrglatmodq
+AZURE_DEVOPS_PASSWORD=4u2j53pdmyhxkcqiwboo2hxyzadtaajptmcluktwsbnxcvhovq3a
 
 kubectl create secret generic tour-of-heroes-az-devops \
 --from-literal=username=$AZURE_DEVOPS_USERNAME \
@@ -82,6 +131,19 @@ flux create source git tour-of-heroes \
 --secret-ref=tour-of-heroes-az-devops \
 --export > ./clusters/$AKS_NAME/sources/tour-of-heroes.yaml
 
+#### IMPORTANTE ####
+# Error por el archivo pr-security-check.yml
+# Añadimos la sección ignore en el archivo del repositorio
+
+  # ignore: |
+  #   pr-security-check.yml
+  #   *.sh
+
+# Aplicar cambios en el repositorio
+git add -A && git commit -m "Añado repositorio git de tour-of-heroes"
+git push
+
+# Comprobar si aparece nuestra nueva fuente
 flux get sources git -n tour-of-heroes
 
 # Create a kustomization with the repo
@@ -94,17 +156,90 @@ flux create kustomization tour-of-heroes \
 --interval=30s \
 --export > ./clusters/$AKS_NAME/apps/tour-of-heroes.yaml
 
-# Push changes
-git add -A && git commit -m "Deploy tour of heroes demo with plain manifests"
+# Aplicar cambios en el repositorio
+git add -A && git commit -m "Desplegar tour of heroes con manifiestos planos"
 git push
 
-### Kustomize
+flux get kustomizations -n tour-of-heroes
 
-# Create a secret with Azure DevOps credentials (TODO: add secret to the source code)
-# kubectl create secret generic tour-of-heroes-az-devops \
-# --from-literal=username=giselatb \
-# --from-literal=password=3c76pwcgm6kp6uq6i3xjmqboi2p7icmj7nbjluprabmrglatmodq \
-# -n tour-of-heroes
+# Comprobar que la aplicación se ha desplegado correctamente
+kubectl get all -n tour-of-heroes
+
+# IMPORTANTE! Si usamos kind, mismo problema con las imágenes. Tenemos que tener el secreto del ACR en el namespace tour-of-heroes (linea 42)
+
+# Flux CD UI (https://github.com/fluxcd/webui)
+
+cd ..
+
+# Descargar la última release
+curl -L https://github.com/fluxcd/webui/releases/download/v0.1.1/flux-webui_0.1.1_darwin_amd64.tar.gz -o flux-webui.tar.gz
+tar -xzf flux-webui.tar.gz
+chmod +x flux-webui
+./flux-webui
+
+http://localhost:9000
+
+
+# Monitorización con Prometheus y Grafana
+
+# Monitoring
+https://fluxcd.io/docs/guides/monitoring/
+
+cd $REPOSITORY
+
+# Add git repository
+flux create source git monitoring \
+--interval=30m \
+--url=https://github.com/fluxcd/flux2 \
+--branch=main \
+--export > ./clusters/$AKS_NAME/sources/monitoring.yaml
+
+# Create kustomization
+flux create kustomization monitoring-stack \
+--interval=1h \
+--prune=true \
+--source=monitoring \
+--path="./manifests/monitoring/kube-prometheus-stack" \
+--health-check="Deployment/kube-prometheus-stack-operator.monitoring" \
+--health-check="Deployment/kube-prometheus-stack-grafana.monitoring" \
+--export > ./clusters/$AKS_NAME/apps/monitoring-stack.yaml
+
+# Install Flux Grafana dashboards
+flux create kustomization monitoring-config \
+--interval=1h \
+--prune=true \
+--source=monitoring \
+--path="./manifests/monitoring/monitoring-config" \
+--export > ./clusters/$AKS_NAME/apps/monitoring-config.yaml
+
+git add -A && git commit -m "Monitoring with Prometheus"
+git push
+
+# Check repository
+flux get sources git --watch
+
+# Check kustomizations
+flux get kustomizations --watch
+
+# Reconcilia Grafana que se queda pillado
+flux reconcile kustomization monitoring-config
+
+k get all -n monitoring
+
+# Access Grafana
+kubectl -n monitoring port-forward svc/kube-prometheus-stack-grafana 3000:80
+
+http://localhost:3000 # admin/prom-operator
+http://localhost:3000/d/flux-control-plane/flux-control-plane?orgId=1&refresh=10s
+http://localhost:3000/d/flux-cluster/flux-cluster-stats?orgId=1&refresh=10s
+
+
+##################################################################################
+############################# Día 2 ##############################################
+##################################################################################
+
+
+### Kustomize
 
 # Use Git over HTTPS 
 flux create source git tour-of-heroes-kustomize \
@@ -167,62 +302,6 @@ git push
 flux get helmrelease -n tour-of-heroes --watch
 
 ### For jsonnet > https://github.com/pelotech/jsonnet-controller
-
-
-# Flux CD UI (https://github.com/fluxcd/webui)
-cd flux-webui
-./flux-webui
-
-http://localhost:9000
-
-# Monitoring
-https://fluxcd.io/docs/guides/monitoring/
-
-# Add git repository
-flux create source git monitoring \
---interval=30m \
---url=https://github.com/fluxcd/flux2 \
---branch=main \
---export > ./clusters/$AKS_NAME/sources/monitoring.yaml
-
-# Create kustomization
-flux create kustomization monitoring-stack \
---interval=1h \
---prune=true \
---source=monitoring \
---path="./manifests/monitoring/kube-prometheus-stack" \
---health-check="Deployment/kube-prometheus-stack-operator.monitoring" \
---health-check="Deployment/kube-prometheus-stack-grafana.monitoring" \
---export > ./clusters/$AKS_NAME/apps/monitoring-stack.yaml
-
-# Install Flux Grafana dashboards
-flux create kustomization monitoring-config \
---interval=1h \
---prune=true \
---source=monitoring \
---path="./manifests/monitoring/monitoring-config" \
---export > ./clusters/$AKS_NAME/apps/monitoring-config.yaml
-
-git add -A && git commit -m "Monitoring with Prometheus"
-git push
-
-# Check repository
-flux get sources git --watch
-
-# Check kustomizations
-flux get kustomizations --watch
-
-# Reconcilia Grafana que se queda pillado
-flux reconcile kustomization monitoring-config
-
-k get all -n monitoring
-
-# Access Grafana
-kubectl -n monitoring port-forward svc/kube-prometheus-stack-grafana 3000:80
-
-http://localhost:3000 # admin/prom-operator
-http://localhost:3000/d/flux-control-plane/flux-control-plane?orgId=1&refresh=10s
-http://localhost:3000/d/flux-cluster/flux-cluster-stats?orgId=1&refresh=10s
 
 
 # CI
