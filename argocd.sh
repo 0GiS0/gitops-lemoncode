@@ -1,34 +1,4 @@
 #####################################################################
-######################## Kubernetes en Azure ########################
-#####################################################################
-
-# Variables
-RESOURCE_GROUP="ArgoCD-Demo"
-AKS_NAME="aks-argocd"
-LOCATION="North Europe"
-ACR_NAME="argocdregistry"
-
-# Create a resource group
-az group create -n $RESOURCE_GROUP -l $LOCATION
-
-# Create an Azure Container Registry
-az acr create \
---resource-group $RESOURCE_GROUP \
---name  $ACR_NAME \
---sku Standard
-
-# Create an AKS cluster
-az aks create \
--n $AKS_NAME \
--g $RESOURCE_GROUP \
---generate-ssh-keys \
---node-vm-size Standard_B4ms \
---attach-acr $ACR_NAME 
-
-# Get AKS credentials
-az aks get-credentials -n $AKS_NAME -g $RESOURCE_GROUP
-
-#####################################################################
 ##################### Kubernetes con kind  ##########################
 #####################################################################
 
@@ -58,8 +28,8 @@ http://localhost:8080
 # Acceder a la API y a la web
 kubectl get pod -n tour-of-heroes -o wide
 
-http://localhost:30050/api/hero 
-http://localhost:30040 # web
+http://localhost:30060/api/hero # api
+http://localhost:30070 # web
 
 
 ##################################################################################
@@ -78,16 +48,12 @@ argocd login localhost:8080
 ######### Create application with plain manifests #########
 ###########################################################
 
-REPO_URL="https://gis@dev.azure.com/gis/Tour%20Of%20Heroes%20GitOps/_git/Plain"
-USER_NAME="giselatb"
-PASSWORD="vjuhqytx5hj3qoxgtqzilslosaqonahow3idngyrr2h725ebyv7q"
+REPO_URL="https://github.com/0GiS0/tour-of-heroes-gitops-demos"
 
 # Add repo
 argocd repo add $REPO_URL \
 --name tour-of-heroes-plain-manifests \
 --type git \
---username $USER_NAME \
---password $PASSWORD \
 --project tour-of-heroes \
 --upsert
 

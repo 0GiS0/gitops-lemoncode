@@ -1,30 +1,4 @@
 #####################################################################
-######################## Kubernetes en Azure ########################
-#####################################################################
-
-# Variables
-RESOURCE_GROUP="fluxcd"
-LOCATION="westeurope"
-AKS_NAME="fluxcd-aks"
-ACR_NAME="argocdregistry"
-
-# Crear un grupo de recursos
-az group create --name $RESOURCE_GROUP --location $LOCATION
-
-# Crear un clúster en AKS
-az aks create \
---resource-group $RESOURCE_GROUP \
---name $AKS_NAME \
---node-vm-size Standard_B4ms \
---generate-ssh-keys \
---attach-acr $ACR_NAME
-
-# Recuperar las credenciales
-az aks get-credentials \
---resource-group $RESOURCE_GROUP \
---name $AKS_NAME
-
-#####################################################################
 ##################### Kubernetes con kind  ##########################
 #####################################################################
 
@@ -43,20 +17,20 @@ brew install fluxcd/tap/flux
 flux check --pre
 
 # Credenciales de GitHub para poder crear un repositorio
-export GITHUB_TOKEN=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
+export GITHUB_TOKEN=<GITHUB_TOKEN>
 export GITHUB_USER=0gis0
 
 REPOSITORY="kind-flux"
-AKS_NAME="kind-flux"
+CLUSTER_NAME="kind-flux"
 
 flux bootstrap github \
   --owner=$GITHUB_USER \
   --repository=$REPOSITORY \
   --branch=main \
-  --path=./clusters/$AKS_NAME \
+  --path=./clusters/$CLUSTER_NAME \
   --personal
 
-# Clone flux repo
+# Clonar el repo que usará flux
 git clone https://github.com/$GITHUB_USER/$REPOSITORY
 cd $REPOSITORY
 
@@ -65,44 +39,27 @@ kubectl get all -n flux-system
 # https://fluxcd.io/docs/guides/repository-structure/
 
 
-# Deploy app in Azure DevOps Repos
-mkdir ./clusters/$AKS_NAME/apps
-mkdir ./clusters/$AKS_NAME/sources
+# Crear carpetas para la estructura del repo de GitOps
+mkdir ./clusters/$CLUSTER_NAME/apps
+mkdir ./clusters/$CLUSTER_NAME/sources
 
-#########################################
-## Add tour of heroes repos using Flux ##
-#########################################
+################################################
+## Añadir tour of heroes al cluster con Flux ##
+###############################################
 
-### Plain Manifests ###
+### Manifiestos planos ###
 kubectl create ns tour-of-heroes
 
-# Create a secret with Azure DevOps credentials (TODO: add secret to the source code)
-AZURE_DEVOPS_REPO_PLAIN="https://gis@dev.azure.com/gis/Tour%20Of%20Heroes%20GitOps/_git/Plain"
-AZURE_DEVOPS_USERNAME=giselatb
-AZURE_DEVOPS_PASSWORD=4u2j53pdmyhxkcqiwboo2hxyzadtaajptmcluktwsbnxcvhovq3a
-
-kubectl create secret generic tour-of-heroes-az-devops \
---from-literal=username=$AZURE_DEVOPS_USERNAME \
---from-literal=password=$AZURE_DEVOPS_PASSWORD \
--n tour-of-heroes
+# Añadir repositorio
+REPO_GITOPS_DEMOS="https://github.com/0GiS0/tour-of-heroes-gitops-demos"
 
 # Use Git over HTTPS 
 flux create source git tour-of-heroes \
 --namespace=tour-of-heroes \
---git-implementation=libgit2 \
---url="https://gis@dev.azure.com/gis/Tour%20Of%20Heroes%20GitOps/_git/Plain" \
+--url=$REPO_GITOPS_DEMOS \
 --branch=main \
 --interval=30s \
---secret-ref=tour-of-heroes-az-devops \
---export > ./clusters/$AKS_NAME/sources/tour-of-heroes.yaml
-
-#### IMPORTANTE ####
-# Error por el archivo pr-security-check.yml
-# Añadimos la sección ignore en el archivo del repositorio
-
-  # ignore: |
-  #   pr-security-check.yml
-  #   *.sh
+--export > ./clusters/$CLUSTER_NAME/sources/tour-of-heroes.yaml
 
 # Aplicar cambios en el repositorio
 git add -A && git commit -m "Añado repositorio git de tour-of-heroes"
@@ -111,15 +68,15 @@ git push
 # Comprobar si aparece nuestra nueva fuente
 flux get sources git -n tour-of-heroes
 
-# Create a kustomization with the repo
+# Dar de alta una aplicación con el repositorio
 flux create kustomization tour-of-heroes \
 --source=tour-of-heroes \
---path="./" \
+--path="./plain-manifests" \
 --namespace=tour-of-heroes \
 --target-namespace tour-of-heroes \
 --prune=true \
 --interval=30s \
---export > ./clusters/$AKS_NAME/apps/tour-of-heroes.yaml
+--export > ./clusters/$CLUSTER_NAME/apps/tour-of-heroes.yaml
 
 # Aplicar cambios en el repositorio
 git add -A && git commit -m "Desplegar tour of heroes con manifiestos planos"
@@ -130,7 +87,10 @@ flux get kustomizations -n tour-of-heroes
 # Comprobar que la aplicación se ha desplegado correctamente
 kubectl get all -n tour-of-heroes
 
-# IMPORTANTE! Si usamos kind, mismo problema con las imágenes. Tenemos que tener el secreto del ACR en el namespace tour-of-heroes (linea 42)
+# Probar que la app funciona
+http://localhost:30040/api/hero # api
+http://localhost:30050 # web
+
 
 # Flux CD UI (https://github.com/fluxcd/webui)
 
@@ -147,19 +107,19 @@ http://localhost:9000
 
 # Monitorización con Prometheus y Grafana
 
-# Monitoring
+# Documentación sobre monitorización
 https://fluxcd.io/docs/guides/monitoring/
 
 cd $REPOSITORY
 
-# Add git repository
+# Añadir el repositorio de git de flux v2
 flux create source git monitoring \
 --interval=30m \
 --url=https://github.com/fluxcd/flux2 \
 --branch=main \
---export > ./clusters/$AKS_NAME/sources/monitoring.yaml
+--export > ./clusters/$CLUSTER_NAME/sources/monitoring.yaml
 
-# Create kustomization
+# Dar de alta una aplicación para Prometheus
 flux create kustomization monitoring-stack \
 --interval=1h \
 --prune=true \
@@ -167,23 +127,23 @@ flux create kustomization monitoring-stack \
 --path="./manifests/monitoring/kube-prometheus-stack" \
 --health-check="Deployment/kube-prometheus-stack-operator.monitoring" \
 --health-check="Deployment/kube-prometheus-stack-grafana.monitoring" \
---export > ./clusters/$AKS_NAME/apps/monitoring-stack.yaml
+--export > ./clusters/$CLUSTER_NAME/apps/monitoring-stack.yaml
 
-# Install Flux Grafana dashboards
+# Dar de alta una aplicación para Grafana
 flux create kustomization monitoring-config \
 --interval=1h \
 --prune=true \
 --source=monitoring \
 --path="./manifests/monitoring/monitoring-config" \
---export > ./clusters/$AKS_NAME/apps/monitoring-config.yaml
+--export > ./clusters/$CLUSTER_NAME/apps/monitoring-config.yaml
 
-git add -A && git commit -m "Monitoring with Prometheus"
+git add -A && git commit -m "Monitorización con Prometheusy Grafana"
 git push
 
-# Check repository
+# Comprbar que se ha añadido la fuente
 flux get sources git --watch
 
-# Check kustomizations
+# Comprobar las aplicaciones
 flux get kustomizations --watch
 
 # Reconcilia Grafana que se queda pillado
@@ -191,7 +151,7 @@ flux reconcile kustomization monitoring-config
 
 k get all -n monitoring
 
-# Access Grafana
+# Acceder a Grafana
 kubectl -n monitoring port-forward svc/kube-prometheus-stack-grafana 3000:80
 
 http://localhost:3000 # admin/prom-operator
@@ -209,12 +169,10 @@ http://localhost:3000/d/flux-cluster/flux-cluster-stats?orgId=1&refresh=10s
 # Use Git over HTTPS 
 flux create source git tour-of-heroes-kustomize \
 --namespace=tour-of-heroes \
---git-implementation=libgit2 \
---url="https://gis@dev.azure.com/gis/Tour%20Of%20Heroes%20GitOps/_git/Tour%20Of%20Heroes%20Kustomize" \
+--url=$REPO_GITOPS_DEMOS \
 --branch=main \
 --interval=30s \
---secret-ref=tour-of-heroes-az-devops \
---export > ./clusters/$AKS_NAME/sources/tour-of-heroes-kustomize.yaml
+--export > ./clusters/$CLUSTER_NAME/sources/tour-of-heroes-kustomize.yaml
 
 flux get sources git -n tour-of-heroes
 
@@ -222,12 +180,12 @@ k create ns tour-of-heroes-kustomize
 
 flux create kustomization tour-of-heroes-kustomize \
 --source=tour-of-heroes-kustomize \
---path="./overlays/development" \
+--path="./kustomize/overlays/development" \
 --namespace=tour-of-heroes \
 --target-namespace tour-of-heroes-kustomize \
 --prune=true \
 --interval=30s \
---export > ./clusters/$AKS_NAME/apps/tour-of-heroes-kustomize.yaml
+--export > ./clusters/$CLUSTER_NAME/apps/tour-of-heroes-kustomize.yaml
 
 git add -A && git commit -m "Deploy tour of heroes demo with kustomize"
 git push
@@ -244,22 +202,20 @@ flux get all
 # Use Git over HTTPS 
 flux create source git tour-of-heroes-helm \
 --namespace=tour-of-heroes \
---git-implementation=libgit2 \
---url="https://gis@dev.azure.com/gis/Tour%20Of%20Heroes%20GitOps/_git/Tour%20Of%20Heroes%20GitOps%20with%20Helm" \
+--url=$REPO_GITOPS_DEMOS \
 --branch=main \
 --interval=30s \
---secret-ref=tour-of-heroes-az-devops \
---export > ./clusters/$AKS_NAME/sources/tour-of-heroes-helm.yaml
+--export > ./clusters/$CLUSTER_NAME/sources/tour-of-heroes-helm.yaml
 
 k create ns tour-of-heroes-helm
 
 flux create helmrelease tour-of-heroes-helm \
 --source=GitRepository/tour-of-heroes-helm \
---chart="./tour-of-heroes-chart" \
+--chart="./helm/tour-of-heroes-chart" \
 --namespace=tour-of-heroes \
 --target-namespace=tour-of-heroes-helm \
 --interval=30s \
---export > ./clusters/$AKS_NAME/apps/tour-of-heroes-helm.yaml
+--export > ./clusters/$CLUSTER_NAME/apps/tour-of-heroes-helm.yaml
 
 git add -A && git commit -m "Deploy tour of heroes demo with Helm"
 git push
@@ -361,30 +317,20 @@ az k8s-configuration flux show \
 # Sample with Kustomize #
 #########################
 
-AZURE_DEVOPS_REPO_PLAIN="https://gis@dev.azure.com/gis/Tour%20Of%20Heroes%20GitOps/_git/Tour%20Of%20Heroes%20Kustomize"
-AZURE_DEVOPS_USERNAME=giselatb
-AZURE_DEVOPS_PASSWORD=3c76pwcgm6kp6uq6i3xjmqboi2p7icmj7nbjluprabmrglatmodq
-
 # Generate a Flux Configuration
 az k8s-configuration flux create \
 --resource-group $RESOURCE_GROUP \
 --cluster-name $AKS_CLUSTER_NAME \
 --name tour-of-heroes-kustomize \
 --cluster-type managedClusters \
---url $AZURE_DEVOPS_REPO_PLAIN \
---https-user $AZURE_DEVOPS_USERNAME \
---https-key $AZURE_DEVOPS_PASSWORD \
+--url $REPO_GITOPS_DEMOS \
 --branch main \
 --sync-interval=10s \
---kustomization name=prod-env path="./overlays/development" prune=true sync_interval=10s retry_interval=1m timeout=2m
+--kustomization name=prod-env path="./kustomize/overlays/development" prune=true sync_interval=10s retry_interval=1m timeout=2m
 
 ########################
 ### Sample with Helm ### TODO
 ########################
-
-AZURE_DEVOPS_REPO_PLAIN="https://gis@dev.azure.com/gis/Tour%20Of%20Heroes%20GitOps/_git/Tour%20Of%20Heroes%20GitOps%20with%20Helm"
-AZURE_DEVOPS_USERNAME=giselatb
-AZURE_DEVOPS_PASSWORD=3c76pwcgm6kp6uq6i3xjmqboi2p7icmj7nbjluprabmrglatmodq
 
 # Generate a Flux Configuration
 az k8s-configuration flux create \
@@ -392,12 +338,10 @@ az k8s-configuration flux create \
 --cluster-name $AKS_CLUSTER_NAME \
 --name tour-of-heroes-helm \
 --cluster-type managedClusters \
---url $AZURE_DEVOPS_REPO_PLAIN \
---https-user $AZURE_DEVOPS_USERNAME \
---https-key $AZURE_DEVOPS_PASSWORD \
+--url $REPO_GITOPS_DEMOS \
 --branch aks-flux-integration \
 --sync-interval=10s \
---kustomization name=helm path="./tour-of-heroes-chart" prune=true sync_interval=10s retry_interval=1m timeout=2m
+--kustomization name=helm path="./helm/tour-of-heroes-chart" prune=true sync_interval=10s retry_interval=1m timeout=2m
 
 
 # List all Flux Configurations
@@ -496,32 +440,24 @@ git push
 # Test decryption
 sops --decrypt ./tour-of-heroes-secured-secrets/base/backend/secret.enc.yaml > backend-secret.yaml
 
-# Create a secret with GitHub credentials
-kubectl create secret generic github-credentials \
---from-literal=username=$GITHUB_USER \
---from-literal=password=$GITHUB_TOKEN \
--n tour-of-heroes
-
 # Create a source of this repo
 flux create source git tour-of-heroes-secured-secrets \
 --namespace=tour-of-heroes \
---git-implementation=libgit2 \
---url=https://github.com/$GITHUB_USER/gitops-lemoncode \
+--url=$REPO_GITOPS_DEMOS \
 --branch=main \
 --interval=30s \
---secret-ref=github-credentials \
---export > ./clusters/$AKS_NAME/sources/tour-of-heroes-secured-secrets.yaml
+--export > ./clusters/$CLUSTER_NAME/sources/tour-of-heroes-secured-secrets.yaml
 
 # Create an application in Flux with SOPS 
 flux create kustomization tour-of-heroes-secured-secrets \
 --namespace=tour-of-heroes \
 --source=tour-of-heroes-secured-secrets \
---path="tour-of-heroes-secured-secrets/overlays/production" \
+--path="secured-secrets/overlays/production" \
 --prune=true \
 --interval=10s \
 --decryption-provider=sops \
 --decryption-secret=sops-gpg \
---export > ./clusters/$AKS_NAME/apps/tour-of-heroes-secured-secrets.yaml
+--export > ./clusters/$CLUSTER_NAME/apps/tour-of-heroes-secured-secrets.yaml
 
 # Add this changes to the repo
 git add -A && git commit -m "Add tour-of-heroes-secured-secrets"
@@ -559,7 +495,7 @@ flux create helmrelease sealed-secrets \
 --chart=sealed-secrets \
 --chart-version=">=1.15.0-0" \
 --crds=CreateReplace \
---export > ./clusters/$AKS_NAME/apps/sealed-secrets.yaml
+--export > ./clusters/$CLUSTER_NAME/apps/sealed-secrets.yaml
 
 # Push changes
 git add -A && git commit -m "Add sealed secrets demo"
