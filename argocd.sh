@@ -36,7 +36,7 @@ az aks get-credentials -n $AKS_NAME -g $RESOURCE_GROUP
 brew install kind
 
 # Crear un cluster para argocb
-kind create cluster --name argocd --config kind/config.yaml
+kind create cluster --name argocd --config kind/argo-config.yaml
 
 #####################################################################
 
@@ -45,7 +45,7 @@ kubectl create namespace argocd
 kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
 
 # Check everything is running
-k get pods -n argocd
+kubectl get pods -n argocd -w
 
 # Recuperar la contraseña para Argo CD (user: admin)
 kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
