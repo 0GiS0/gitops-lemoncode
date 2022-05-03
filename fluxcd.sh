@@ -8,10 +8,10 @@ LOCATION="westeurope"
 AKS_NAME="fluxcd-aks"
 ACR_NAME="argocdregistry"
 
-# Create a resource group
+# Crear un grupo de recursos
 az group create --name $RESOURCE_GROUP --location $LOCATION
 
-# Create an AKS cluster
+# Crear un clúster en AKS
 az aks create \
 --resource-group $RESOURCE_GROUP \
 --name $AKS_NAME \
@@ -19,20 +19,20 @@ az aks create \
 --generate-ssh-keys \
 --attach-acr $ACR_NAME
 
-# Get AKS credentials
+# Recuperar las credenciales
 az aks get-credentials \
 --resource-group $RESOURCE_GROUP \
 --name $AKS_NAME
 
 #####################################################################
-##################### Kubernetes con kind Azure #####################
+##################### Kubernetes con kind  ##########################
 #####################################################################
 
 # Instalar kind
 brew install kind
 
 # Crear un cluster para argocb
-kind create cluster --name flux --config kind/config.yaml
+kind create cluster --name flux --config kind/flux-config.yaml
 
 #####################################################################
 
