@@ -1,4 +1,4 @@
-fluxcd-demo
+kind-flux
 .dccache
 .gitignore
 .DS_Store
