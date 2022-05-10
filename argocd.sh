@@ -5,7 +5,7 @@
 # Instalar kind
 brew install kind
 
-# Crear un cluster para argocb
+# Crear un cluster para argocd
 kind create cluster --name argocd --config kind/argo-config.yaml
 
 #####################################################################

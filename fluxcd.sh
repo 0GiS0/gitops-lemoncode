@@ -20,7 +20,7 @@ flux check --pre
 export GITHUB_TOKEN=<GITHUB_TOKEN>
 export GITHUB_USER=0gis0
 
-REPOSITORY="kind-flux"
+REPOSITORY="lemoncode-flux"
 CLUSTER_NAME="kind-flux"
 
 flux bootstrap github \
@@ -65,7 +65,7 @@ git add -A && git commit -m "Añado repositorio git de tour-of-heroes"
 git push
 
 # Comprobar si aparece nuestra nueva fuente
-flux get sources git
+flux get sources git --watch
 
 # Dar de alta una aplicación con el repositorio
 flux create kustomization tour-of-heroes \
